@@ -1,0 +1,6 @@
+{
+  "out": "deno_out/",
+  "ports": {
+    "grammy": "https://deno.land/x/grammy@v1.28.0/mod.ts"
+  }
+}

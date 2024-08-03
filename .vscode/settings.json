@@ -1,0 +1,5 @@
+{
+  "editor.formatOnSave": true,
+  "deno.enablePaths": ["examples"],
+  "deno.lint": true
+}
