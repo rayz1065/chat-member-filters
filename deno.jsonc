@@ -10,7 +10,8 @@
       "./node_modules/",
       "./out/",
       "./package-lock.json"
-    ]
+    ],
+    "proseWrap": "preserve"
   },
   "lint": {
     "exclude": [
