@@ -1,0 +1,26 @@
+{
+  "lock": false,
+  "fmt": {
+    "lineWidth": 80,
+    "indentWidth": 2,
+    "useTabs": false,
+    "semiColons": true,
+    "singleQuote": true,
+    "exclude": [
+      "./node_modules/",
+      "./out/",
+      "./package-lock.json"
+    ]
+  },
+  "lint": {
+    "exclude": [
+      "./node_modules/",
+      "./out/",
+      "./package-lock.json",
+      "./src/deps.node.ts"
+    ]
+  },
+  "tasks": {
+    "deno2node": "rm -rf out && npm install --no-package-lock && deno run --no-prompt --allow-read=. --allow-write=. https://lib.deno.dev/x/deno2node@v1/src/cli.ts --project tsconfig.build.json"
+  }
+}

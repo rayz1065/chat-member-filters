@@ -1,5 +1,17 @@
 {
   "editor.formatOnSave": true,
-  "deno.enablePaths": ["examples"],
-  "deno.lint": true
+  "deno.config": "./deno.jsonc",
+  "deno.enablePaths": ["."],
+  "deno.disablePaths": ["./src/deps.node.ts", "./out"],
+  "deno.lint": true,
+  "editor.defaultFormatter": "denoland.vscode-deno",
+  "[typescript]": {
+    "editor.defaultFormatter": "denoland.vscode-deno"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "denoland.vscode-deno"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "denoland.vscode-deno"
+  }
 }

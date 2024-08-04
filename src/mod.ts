@@ -1,4 +1,3 @@
-import { Context, Filter } from 'grammy';
 import {
   ChatMember,
   ChatMemberAdministrator,
@@ -7,7 +6,9 @@ import {
   ChatMemberMember,
   ChatMemberOwner,
   ChatMemberRestricted,
-} from 'grammy/types';
+  Context,
+  Filter,
+} from './deps.deno.ts';
 
 /**
  * A member of the chat, with any role, possibly restricted.
@@ -67,11 +68,10 @@ type NormalizeChatMemberFilterQueryCore<Q extends ChatMemberFilterQuery> =
   (typeof chatMemberFilterQueries)[Q][number];
 type NormalizeChatMemberFilterQuery<
   Q extends MaybeArray<ChatMemberFilterQuery>,
-> = Q extends ChatMemberFilterQuery
-  ? NormalizeChatMemberFilterQueryCore<Q>
-  : Q extends ChatMemberFilterQuery[]
+> = Q extends ChatMemberFilterQuery ? NormalizeChatMemberFilterQueryCore<Q>
+  : (Q extends ChatMemberFilterQuery[]
     ? NormalizeChatMemberFilterQuery<Q[number]>
-    : never;
+    : never);
 type FilteredChatMember<
   C extends ChatMember,
   Q extends MaybeArray<ChatMemberFilterQuery>,
@@ -82,11 +82,11 @@ type FilteredChatMember<
  * statuses.
  */
 export function normalizeChatMemberFilterQuery<T extends ChatMemberFilterQuery>(
-  query: MaybeArray<T>
+  query: MaybeArray<T>,
 ): NormalizeChatMemberFilterQuery<T>[] {
   if (Array.isArray(query)) {
     const res = new Set<ChatMemberFilterQuery>(
-      query.flatMap(normalizeChatMemberFilterQuery)
+      query.flatMap(normalizeChatMemberFilterQuery),
     );
     return [...res] as NormalizeChatMemberFilterQuery<T>[];
   }
@@ -101,7 +101,7 @@ export function chatMemberIs<
   Q extends ChatMemberFilterQuery,
 >(
   chatMember: C,
-  filter: MaybeArray<Q>
+  filter: MaybeArray<Q>,
 ): chatMember is FilteredChatMember<C, Q> {
   const roles = normalizeChatMemberFilterQuery(filter);
   return roles.includes(chatMember.status as (typeof roles)[number]);
@@ -194,28 +194,17 @@ export type ChatMemberPrivileges = ChatMemberPermissions & {
 };
 
 /**
- * Type helper to check that all keys are present in the array
- */
-function _hasAllKeys<Obj, Arr extends (keyof Obj)[]>(
-  val: keyof Obj extends Arr[number] ? number : never
-) {
-  return val;
-}
-_hasAllKeys<ChatMemberPermissions, typeof chatMemberPermissions>(1);
-_hasAllKeys<ChatMemberPrivileges, typeof chatMemberPrivileges>(1);
-
-/**
  * Returns the full chat member privileges for any kind of chat member, the
  * owner has all privileges, regular users have no privileges. Missing (i.e.
  * irrelevant) values for administrators are replaced with false.
  */
 export function getChatMemberPrivileges(
-  chatMember: ChatMember
+  chatMember: ChatMember,
 ): ChatMemberPrivileges {
   const defaultPermission = chatMember.status === 'creator';
 
   const defaults = Object.fromEntries(
-    chatMemberPermissions.map((x) => [x, defaultPermission])
+    chatMemberPermissions.map((x) => [x, defaultPermission]),
   ) as ChatMemberPermissions;
 
   if (chatMember.status === 'creator') {
@@ -232,7 +221,7 @@ export function getChatMemberPrivileges(
         chatMemberPermissions.map((x) => [
           x,
           chatMember[x] ?? defaultPermission,
-        ])
+        ]),
       ) as ChatMemberPermissions),
       custom_title: chatMember.custom_title,
       is_anonymous: chatMember.is_anonymous,
@@ -273,9 +262,9 @@ export function getChangedChatMemberPrivileges(chatMemberChange: {
 export function getChatMemberMissingPermissions<
   T extends keyof ChatMemberPermissions,
 >(chatMember: ChatMember, requiredPermissions: T[]): T[] {
-  const actualYPermissions = getChatMemberPrivileges(chatMember);
+  const actualPermissions = getChatMemberPrivileges(chatMember);
   return requiredPermissions.filter(
-    (permission) => actualYPermissions[permission] !== true
+    (permission) => actualPermissions[permission] !== true,
   );
 }
 
@@ -284,22 +273,22 @@ export function getChatMemberMissingPermissions<
  */
 export function chatMemberHasPermissions(
   chatMember: ChatMember,
-  requiredPermissions: (keyof ChatMemberPermissions)[]
+  requiredPermissions: (keyof ChatMemberPermissions)[],
 ): boolean {
   const missing = getChatMemberMissingPermissions(
     chatMember,
-    requiredPermissions
+    requiredPermissions,
   );
   return missing.length === 0;
 }
 
-export function filterMyChatMember<
+export function myChatMemberFilter<
   C extends Context,
   Q1 extends ChatMemberFilterQuery,
   Q2 extends ChatMemberFilterQuery,
 >(oldStatus: MaybeArray<Q1>, newStatus: MaybeArray<Q2>) {
   return (
-    ctx: C
+    ctx: C,
   ): ctx is Filter<C, 'my_chat_member'> & {
     myChatMember: {
       old_chat_member: FilteredChatMember<ChatMember, Q1>;
@@ -310,24 +299,20 @@ export function filterMyChatMember<
       return false;
     }
 
-    if (
-      !chatMemberIs(ctx.myChatMember.old_chat_member, oldStatus) ||
-      !chatMemberIs(ctx.myChatMember.new_chat_member, newStatus)
-    ) {
-      return false;
-    }
-
-    return true;
+    return (
+      chatMemberIs(ctx.myChatMember.old_chat_member, oldStatus) &&
+      chatMemberIs(ctx.myChatMember.new_chat_member, newStatus)
+    );
   };
 }
 
-export function filterChatMember<
+export function chatMemberFilter<
   C extends Context,
   Q1 extends ChatMemberFilterQuery,
   Q2 extends ChatMemberFilterQuery,
 >(oldStatus: MaybeArray<Q1>, newStatus: MaybeArray<Q2>) {
   return (
-    ctx: C
+    ctx: C,
   ): ctx is Filter<C, 'chat_member'> & {
     chatMember: {
       old_chat_member: FilteredChatMember<ChatMember, Q1>;
@@ -338,13 +323,9 @@ export function filterChatMember<
       return false;
     }
 
-    if (
-      !chatMemberIs(ctx.chatMember.old_chat_member, oldStatus) ||
-      !chatMemberIs(ctx.chatMember.new_chat_member, newStatus)
-    ) {
-      return false;
-    }
-
-    return true;
+    return (
+      chatMemberIs(ctx.chatMember.old_chat_member, oldStatus) &&
+      chatMemberIs(ctx.chatMember.new_chat_member, newStatus)
+    );
   };
 }

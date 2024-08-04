@@ -13,26 +13,14 @@
     "url": "git+https://github.com/rayz1065/chat-member-filters.git"
   },
   "scripts": {
-    "test": "jest",
-    "lint": "eslint src --ext .ts",
-    "lint:fix": "eslint src --ext .ts --fix",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "build": "tsc --project tsconfig.build.json && denoify",
+    "build": "deno task deno2node",
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
     "grammy": "^1.28.0"
   },
   "devDependencies": {
-    "@types/jest": "^29.5.12",
     "@types/node": "^20.14.0",
-    "@typescript-eslint/eslint-plugin": "^7.11.0",
-    "@typescript-eslint/parser": "^7.11.0",
-    "denoify": "^1.6.13",
-    "eslint": "^8.57.0",
-    "jest": "^29.7.0",
-    "prettier": "^3.3.0",
-    "ts-jest": "^29.1.4",
     "typescript": "^5.4.0"
   },
   "files": [
