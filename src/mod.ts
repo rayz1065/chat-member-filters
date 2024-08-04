@@ -295,11 +295,8 @@ export function myChatMemberFilter<
       new_chat_member: FilteredChatMember<ChatMember, Q2>;
     };
   } => {
-    if (!ctx.has('my_chat_member')) {
-      return false;
-    }
-
     return (
+      ctx.has('my_chat_member') &&
       chatMemberIs(ctx.myChatMember.old_chat_member, oldStatus) &&
       chatMemberIs(ctx.myChatMember.new_chat_member, newStatus)
     );
@@ -319,11 +316,8 @@ export function chatMemberFilter<
       new_chat_member: FilteredChatMember<ChatMember, Q2>;
     };
   } => {
-    if (!ctx.has('chat_member')) {
-      return false;
-    }
-
     return (
+      ctx.has('chat_member') &&
       chatMemberIs(ctx.chatMember.old_chat_member, oldStatus) &&
       chatMemberIs(ctx.chatMember.new_chat_member, newStatus)
     );
