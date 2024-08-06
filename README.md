@@ -60,6 +60,56 @@ groups.filter(
 );
 ```
 
+## Example usage
+
+For a complete example run:
+
+```bash
+BOT_TOKEN="12345:your-bot-token" deno run --allow-net=api.telegram.org --allow-env ./examples/transitions.ts
+```
+
+The best way to use this plugin is to pick a set of relevant statuses, for example 'out', 'regular' and 'admin', then make a table of the transitions between them:
+
+| ↱           | Out         | Regular              | Admin               |
+| ----------- | ----------- | -------------------- | ------------------- |
+| **Out**     | ban-changed | join                 | join-and-promoted   |
+| **Regular** | exit        | restrictions-changed | promoted            |
+| **Admin**   | exit        | demoted              | permissions-changed |
+
+Assign a listener to all the transitions that are relevant to your use-case.
+
+Combine these filters with `bot.chatType` to only listen for transitions for a specific type of chat.
+Add a middleware to listen to all updates as a way to perform common operations (like updating your database) before handing off control to a specific handler.
+
+```typescript
+const groups = bot.chatType(['group', 'supergroup']);
+
+groups.on('chat_member', (ctx, next) => {
+  // ran on all updates of type chat_member
+  const {
+    old_chat_member: { status: oldStatus },
+    new_chat_member: { user, status },
+    from,
+    chat,
+  } = ctx.chatMember;
+  console.log(
+    `In group ${chat.id} user ${from.id} changed status of ${user.id}:`,
+    `${oldStatus} -> ${status}`,
+  );
+
+  // update database data here
+
+  return next();
+});
+
+// specific handlers
+
+groups.filter(chatMemberFilter('out', 'in'), async (ctx, next) => {
+  const { new_chat_member: { user } } = ctx.chatMember;
+  await ctx.reply(`Welcome ${user.first_name}!`);
+});
+```
+
 ## License
 
 Grammy Chat Member Filters is available under the **MIT License**.
