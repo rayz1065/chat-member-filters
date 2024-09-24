@@ -1,4 +1,5 @@
 import {
+  ChatAdministratorRights,
   ChatMember,
   ChatMemberAdministrator,
   ChatMemberBanned,
@@ -40,7 +41,7 @@ export type ChatMemberRegular = ChatMemberRestricted | ChatMemberMember;
 /**
  * Query type for chat member status.
  */
-export type ChatMemberFilterQuery =
+export type ChatMemberQuery =
   | 'in'
   | 'out'
   | 'free'
@@ -48,7 +49,7 @@ export type ChatMemberFilterQuery =
   | 'regular'
   | ChatMember['status'];
 
-const chatMemberFilterQueries = {
+const chatMemberQueries = {
   admin: ['administrator', 'creator'],
   administrator: ['administrator'],
   creator: ['creator'],
@@ -60,50 +61,49 @@ const chatMemberFilterQueries = {
   left: ['left'],
   member: ['member'],
   restricted: ['restricted'],
-} as const satisfies Record<ChatMemberFilterQuery, ChatMember['status'][]>;
+} as const satisfies Record<ChatMemberQuery, ChatMember['status'][]>;
 
 type MaybeArray<T> = T | T[];
 
-type NormalizeChatMemberFilterQueryCore<Q extends ChatMemberFilterQuery> =
-  (typeof chatMemberFilterQueries)[Q][number];
-type NormalizeChatMemberFilterQuery<
-  Q extends MaybeArray<ChatMemberFilterQuery>,
-> = Q extends ChatMemberFilterQuery ? NormalizeChatMemberFilterQueryCore<Q>
-  : (Q extends ChatMemberFilterQuery[]
-    ? NormalizeChatMemberFilterQuery<Q[number]>
+type NormalizeChatMemberQueryCore<Q extends ChatMemberQuery> =
+  (typeof chatMemberQueries)[Q][number];
+type NormalizeChatMemberQuery<
+  Q extends MaybeArray<ChatMemberQuery>,
+> = Q extends ChatMemberQuery ? NormalizeChatMemberQueryCore<Q>
+  : (Q extends ChatMemberQuery[] ? NormalizeChatMemberQuery<Q[number]>
     : never);
-type FilteredChatMember<
+export type FilteredChatMember<
   C extends ChatMember,
-  Q extends MaybeArray<ChatMemberFilterQuery>,
-> = C & { status: NormalizeChatMemberFilterQuery<Q> };
+  Q extends MaybeArray<ChatMemberQuery>,
+> = C & { status: NormalizeChatMemberQuery<Q> };
 
 /**
- * Normalizes the filter query, returning the corresponding list of chat member
+ * Normalizes the query, returning the corresponding list of chat member
  * statuses.
  */
-export function normalizeChatMemberFilterQuery<T extends ChatMemberFilterQuery>(
+function normalizeChatMemberQuery<T extends ChatMemberQuery>(
   query: MaybeArray<T>,
-): NormalizeChatMemberFilterQuery<T>[] {
+): NormalizeChatMemberQuery<T>[] {
   if (Array.isArray(query)) {
-    const res = new Set<ChatMemberFilterQuery>(
-      query.flatMap(normalizeChatMemberFilterQuery),
+    const res = new Set<ChatMemberQuery>(
+      query.flatMap(normalizeChatMemberQuery),
     );
-    return [...res] as NormalizeChatMemberFilterQuery<T>[];
+    return [...res] as NormalizeChatMemberQuery<T>[];
   }
 
   return [
-    ...chatMemberFilterQueries[query],
-  ] as NormalizeChatMemberFilterQuery<T>[];
+    ...chatMemberQueries[query],
+  ] as NormalizeChatMemberQuery<T>[];
 }
 
 export function chatMemberIs<
   C extends ChatMember,
-  Q extends ChatMemberFilterQuery,
+  Q extends ChatMemberQuery,
 >(
   chatMember: C,
-  filter: MaybeArray<Q>,
+  query: MaybeArray<Q>,
 ): chatMember is FilteredChatMember<C, Q> {
-  const roles = normalizeChatMemberFilterQuery(filter);
+  const roles = normalizeChatMemberQuery(query);
   return roles.includes(chatMember.status as (typeof roles)[number]);
 }
 
@@ -147,145 +147,80 @@ export function chatMemberIsRegular(chatMember: ChatMember) {
 }
 
 /**
- * A list of permissions that admins can have.
+ * A list of rights that admins can have.
  */
-export const chatMemberPermissions = [
-  'can_change_info',
-  'can_delete_messages',
-  'can_delete_stories',
-  'can_edit_messages',
-  'can_edit_stories',
-  'can_invite_users',
-  'can_manage_chat',
-  'can_manage_topics',
-  'can_manage_video_chats',
-  'can_pin_messages',
-  'can_post_messages',
-  'can_post_stories',
-  'can_promote_members',
-  'can_restrict_members',
-] as const satisfies (keyof ChatMemberAdministrator)[];
-
-/**
- * A list of privileges that chat members can have. These include permissions
- * as well as `custom_title` and `is_anonymous`.
- */
-export const chatMemberPrivileges = [
-  ...chatMemberPermissions,
-  'custom_title',
+const chatMemberRights = [
   'is_anonymous',
-] as const satisfies (keyof ChatMemberAdministrator)[];
+  'can_manage_chat',
+  'can_delete_messages',
+  'can_manage_video_chats',
+  'can_restrict_members',
+  'can_promote_members',
+  'can_change_info',
+  'can_invite_users',
+  'can_post_stories',
+  'can_edit_stories',
+  'can_delete_stories',
+  'can_post_messages',
+  'can_edit_messages',
+  'can_pin_messages',
+  'can_manage_topics',
+] as const satisfies (keyof ChatAdministratorRights)[];
 
-/**
- * Permissions of a chat member.
- */
-export type ChatMemberPermissions = Record<
-  (typeof chatMemberPermissions)[number],
-  boolean
->;
+type AdministratorRight = typeof chatMemberRights[number];
 
-/**
- * Privileges of a chat member, these include permissions as well as
- * `custom_title` and `is_anonymous`.
- */
-export type ChatMemberPrivileges = ChatMemberPermissions & {
-  custom_title: string | undefined;
-  is_anonymous: boolean;
-};
-
-/**
- * Returns the full chat member privileges for any kind of chat member, the
- * owner has all privileges, regular users have no privileges. Missing (i.e.
- * irrelevant) values for administrators are replaced with false.
- */
-export function getChatMemberPrivileges(
+function getChatMemberRights(
   chatMember: ChatMember,
-): ChatMemberPrivileges {
-  const defaultPermission = chatMember.status === 'creator';
+): Record<AdministratorRight, boolean> {
+  const defaultRight = chatMember.status === 'creator';
 
   const defaults = Object.fromEntries(
-    chatMemberPermissions.map((x) => [x, defaultPermission]),
-  ) as ChatMemberPermissions;
+    chatMemberRights.map((x) => [x, defaultRight]),
+  ) as Record<AdministratorRight, boolean>;
 
-  if (chatMember.status === 'creator') {
-    return {
-      ...defaults,
-      custom_title: chatMember.custom_title,
-      is_anonymous: chatMember.is_anonymous,
-    };
+  if (chatMember.status !== 'administrator') {
+    return defaults;
   }
 
-  if (chatMember.status === 'administrator') {
-    return {
-      ...(Object.fromEntries(
-        chatMemberPermissions.map((x) => [
-          x,
-          chatMember[x] ?? defaultPermission,
-        ]),
-      ) as ChatMemberPermissions),
-      custom_title: chatMember.custom_title,
-      is_anonymous: chatMember.is_anonymous,
-    };
-  }
-
-  return {
-    ...defaults,
-    custom_title: undefined,
-    is_anonymous: false,
-  };
+  return Object.fromEntries(
+    chatMemberRights.map((x) => [
+      x,
+      chatMember[x] ?? defaultRight,
+    ]),
+  ) as Record<AdministratorRight, boolean>;
 }
 
 /**
- * Returns the privileges that have changed between the old and new chat
- * member.
- *
- * You can pass in directly a `ChatMemberUpdated` object.
- * ```typescript
- * bot.on('my_chat_member', (ctx) => {
- *  const changedPermissions = getChangedChatMemberPrivileges(ctx.myChatMember);
- * })
- * ```
+ * Returns the rights that the chat member is missing from the list of
+ * required rights.
  */
-export function getChangedChatMemberPrivileges(chatMemberChange: {
-  new_chat_member: ChatMember;
-  old_chat_member: ChatMember;
-}) {
-  const previous = getChatMemberPrivileges(chatMemberChange.old_chat_member);
-  const current = getChatMemberPrivileges(chatMemberChange.new_chat_member);
-  return chatMemberPrivileges.filter((key) => previous[key] !== current[key]);
-}
-
-/**
- * Returns the permissions that the chat member is missing from the list of
- * required permissions.
- */
-export function getChatMemberMissingPermissions<
-  T extends keyof ChatMemberPermissions,
->(chatMember: ChatMember, requiredPermissions: T[]): T[] {
-  const actualPermissions = getChatMemberPrivileges(chatMember);
-  return requiredPermissions.filter(
-    (permission) => actualPermissions[permission] !== true,
+export function getMissingRights<
+  T extends AdministratorRight,
+>(chatMember: ChatMember, ...requiredRights: T[]): T[] {
+  const rights = getChatMemberRights(chatMember);
+  return requiredRights.filter(
+    (right) => !rights[right as keyof typeof rights],
   );
 }
 
 /**
- * Returns true if all the required permissions are met.
+ * Returns true if all the required rights are met.
  */
-export function chatMemberHasPermissions(
+export function chatMemberHasRights(
   chatMember: ChatMember,
-  requiredPermissions: (keyof ChatMemberPermissions)[],
+  ...requiredRights: (AdministratorRight)[]
 ): boolean {
-  const missing = getChatMemberMissingPermissions(
+  const missing = getMissingRights(
     chatMember,
-    requiredPermissions,
+    ...requiredRights,
   );
   return missing.length === 0;
 }
 
 export function myChatMemberFilter<
   C extends Context,
-  Q1 extends ChatMemberFilterQuery,
-  Q2 extends ChatMemberFilterQuery,
+  Q1 extends ChatMemberQuery,
+  Q2 extends ChatMemberQuery,
 >(oldStatus: MaybeArray<Q1>, newStatus: MaybeArray<Q2>) {
   return (
     ctx: C,
@@ -305,8 +240,8 @@ export function myChatMemberFilter<
 
 export function chatMemberFilter<
   C extends Context,
-  Q1 extends ChatMemberFilterQuery,
-  Q2 extends ChatMemberFilterQuery,
+  Q1 extends ChatMemberQuery,
+  Q2 extends ChatMemberQuery,
 >(oldStatus: MaybeArray<Q1>, newStatus: MaybeArray<Q2>) {
   return (
     ctx: C,

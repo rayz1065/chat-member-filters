@@ -1,97 +1,25 @@
 import {
   Api,
   ChatMember,
+  ChatMemberAdministrator,
   ChatMemberUpdated,
   Context,
   UserFromGetMe,
 } from './deps.deno.ts';
+import { chatMemberHasRights } from './mod.ts';
 import {
   chatMemberFilter,
-  ChatMemberFilterQuery,
   chatMemberIs,
-  ChatMemberPermissions,
-  chatMemberPermissions,
-  ChatMemberPrivileges,
-  chatMemberPrivileges,
+  ChatMemberQuery,
+  getMissingRights,
   myChatMemberFilter,
-  normalizeChatMemberFilterQuery,
 } from './mod.ts';
 import { assertEquals } from 'jsr:@std/assert@1';
-
-/**
- * Type helper to check that all keys are present in the array
- */
-function _hasAllKeys<Obj, Arr extends (keyof Obj)[]>(
-  val: keyof Obj extends Arr[number] ? number : never,
-) {
-  return val;
-}
-_hasAllKeys<ChatMemberPermissions, typeof chatMemberPermissions>(1);
-_hasAllKeys<ChatMemberPrivileges, typeof chatMemberPrivileges>(1);
-
-Deno.test('should normalize combined filter queries', () => {
-  assertEquals(normalizeChatMemberFilterQuery('admin').sort(), [
-    'administrator',
-    'creator',
-  ]);
-  assertEquals(normalizeChatMemberFilterQuery('free').sort(), [
-    'administrator',
-    'creator',
-    'member',
-  ]);
-  assertEquals(normalizeChatMemberFilterQuery('in').sort(), [
-    'administrator',
-    'creator',
-    'member',
-    'restricted',
-  ]);
-  assertEquals(normalizeChatMemberFilterQuery('out').sort(), [
-    'kicked',
-    'left',
-  ]);
-  assertEquals(normalizeChatMemberFilterQuery('regular').sort(), [
-    'member',
-    'restricted',
-  ]);
-});
-
-Deno.test('should normalize regular filter queries', () => {
-  const statuses: ChatMember['status'][] = [
-    'administrator',
-    'creator',
-    'kicked',
-    'left',
-    'member',
-    'restricted',
-  ];
-  statuses.forEach((status) => {
-    assertEquals(normalizeChatMemberFilterQuery(status), [status]);
-  });
-});
-
-Deno.test('should normalize filter query arrays', () => {
-  assertEquals(normalizeChatMemberFilterQuery(['regular', 'out']).sort(), [
-    'kicked',
-    'left',
-    'member',
-    'restricted',
-  ]);
-  assertEquals(normalizeChatMemberFilterQuery(['restricted', 'out']).sort(), [
-    'kicked',
-    'left',
-    'restricted',
-  ]);
-  assertEquals(
-    normalizeChatMemberFilterQuery(['admin', 'administrator', 'creator'])
-      .sort(),
-    ['administrator', 'creator'],
-  );
-});
 
 Deno.test('should apply query to chat member', () => {
   const results: Record<
     ChatMember['status'],
-    Record<Exclude<ChatMemberFilterQuery, ChatMember['status']>, boolean>
+    Record<Exclude<ChatMemberQuery, ChatMember['status']>, boolean>
   > = {
     administrator: {
       in: true,
@@ -256,5 +184,31 @@ Deno.test('should filter out other types of updates', () => {
   assertEquals(
     chatMemberFilter('free', 'restricted')(memberRestrictedCtx),
     false,
+  );
+});
+
+Deno.test('should check for rights', () => {
+  const administrator = {
+    status: 'administrator',
+    can_change_info: true,
+    can_promote_members: false,
+  } as ChatMemberAdministrator;
+  assertEquals(
+    getMissingRights(
+      administrator,
+      'can_promote_members',
+      'can_change_info',
+      'can_pin_messages',
+    ),
+    ['can_promote_members', 'can_pin_messages'],
+  );
+
+  assertEquals(
+    chatMemberHasRights(administrator, 'can_promote_members'),
+    false,
+  );
+  assertEquals(
+    chatMemberHasRights(administrator, 'can_change_info'),
+    true,
   );
 });
