@@ -12,17 +12,41 @@ import {
 } from './deps.deno.ts';
 
 /**
+ * The 'restricted' status is ambiguous, since it can refer both to a member in
+ * the group and a member out of the group.
+ * To avoid ambiguity we split the restricted role into "restricted_in" and
+ * "restricted_out".
+ */
+type ChatMemberStatusBase =
+  | Exclude<ChatMember['status'], 'restricted'>
+  | 'restricted_in'
+  | 'restricted_out';
+
+/**
+ * A member of the chat, with restrictions applied.
+ */
+export type ChatMemberRestrictedIn = ChatMemberRestricted & { is_member: true };
+/**
+ * Not a member of the chat, with restrictions applied.
+ */
+export type ChatMemberRestrictedOut = ChatMemberRestricted & {
+  is_member: false;
+};
+/**
  * A member of the chat, with any role, possibly restricted.
  */
 export type ChatMemberIn =
   | ChatMemberAdministrator
   | ChatMemberOwner
-  | ChatMemberRestricted
+  | ChatMemberRestrictedIn
   | ChatMemberMember;
 /**
  * Not a member of the chat
  */
-export type ChatMemberOut = ChatMemberBanned | ChatMemberLeft;
+export type ChatMemberOut =
+  | ChatMemberBanned
+  | ChatMemberLeft
+  | ChatMemberRestrictedOut;
 /**
  * A member of the chat, with any role, not restricted.
  */
@@ -37,7 +61,7 @@ export type ChatMemberAdmin = ChatMemberAdministrator | ChatMemberOwner;
 /**
  * A regular (non-admin) user of the chat, possibly restricted.
  */
-export type ChatMemberRegular = ChatMemberRestricted | ChatMemberMember;
+export type ChatMemberRegular = ChatMemberRestrictedIn | ChatMemberMember;
 /**
  * Query type for chat member status.
  */
@@ -47,35 +71,71 @@ export type ChatMemberQuery =
   | 'free'
   | 'admin'
   | 'regular'
+  | 'restricted_in'
+  | 'restricted_out'
   | ChatMember['status'];
 
+/**
+ * Used to normalize queries to the simplest components.
+ */
 const chatMemberQueries = {
   admin: ['administrator', 'creator'],
   administrator: ['administrator'],
   creator: ['creator'],
   free: ['administrator', 'creator', 'member'],
-  in: ['administrator', 'creator', 'member', 'restricted'],
-  out: ['kicked', 'left'],
-  regular: ['member', 'restricted'],
+  in: ['administrator', 'creator', 'member', 'restricted_in'],
+  out: ['kicked', 'left', 'restricted_out'],
+  regular: ['member', 'restricted_in'],
   kicked: ['kicked'],
   left: ['left'],
   member: ['member'],
   restricted: ['restricted'],
-} as const satisfies Record<ChatMemberQuery, ChatMember['status'][]>;
+  restricted_in: ['restricted_in'],
+  restricted_out: ['restricted_out'],
+} as const satisfies Record<
+  ChatMemberQuery,
+  (ChatMember['status'] | 'restricted_in' | 'restricted_out')[]
+>;
 
-type MaybeArray<T> = T | T[];
+/**
+ * Maps from the query to the corresponding type.
+ */
+type ChatMemberQueriesMap = {
+  admin: ChatMemberAdmin;
+  administrator: ChatMemberAdministrator;
+  creator: ChatMemberOwner;
+  free: ChatMemberFree;
+  in: ChatMemberIn;
+  out: ChatMemberOut;
+  regular: ChatMemberRegular;
+  kicked: ChatMemberBanned;
+  left: ChatMemberLeft;
+  member: ChatMemberMember;
+  restricted: ChatMemberRestricted;
+  restricted_in: ChatMemberRestrictedIn;
+  restricted_out: ChatMemberRestrictedOut;
+};
 
 type NormalizeChatMemberQueryCore<Q extends ChatMemberQuery> =
   (typeof chatMemberQueries)[Q][number];
+
+type MaybeArray<T> = T | T[];
 type NormalizeChatMemberQuery<
   Q extends MaybeArray<ChatMemberQuery>,
 > = Q extends ChatMemberQuery ? NormalizeChatMemberQueryCore<Q>
   : (Q extends ChatMemberQuery[] ? NormalizeChatMemberQuery<Q[number]>
     : never);
+type FilteredChatMemberCore<
+  C extends ChatMember,
+  Q extends ChatMember['status'] | 'restricted_in' | 'restricted_out',
+> = C & ChatMemberQueriesMap[Q];
 export type FilteredChatMember<
   C extends ChatMember,
   Q extends MaybeArray<ChatMemberQuery>,
-> = C & { status: NormalizeChatMemberQuery<Q> };
+> = FilteredChatMemberCore<
+  C,
+  NormalizeChatMemberQuery<Q extends string ? Q : Q[number]>
+>;
 
 /**
  * Normalizes the query, returning the corresponding list of chat member
@@ -104,6 +164,17 @@ export function chatMemberIs<
   query: MaybeArray<Q>,
 ): chatMember is FilteredChatMember<C, Q> {
   const roles = normalizeChatMemberQuery(query);
+
+  if (chatMember.status === 'restricted') {
+    if (roles.includes('restricted' as (typeof roles)[number])) {
+      return true;
+    } else if (chatMember.is_member) {
+      return roles.includes('restricted_in' as (typeof roles)[number]);
+    } else {
+      return roles.includes('restricted_out' as (typeof roles)[number]);
+    }
+  }
+
   return roles.includes(chatMember.status as (typeof roles)[number]);
 }
 
@@ -144,6 +215,20 @@ export function chatMemberIsAdmin(chatMember: ChatMember) {
  */
 export function chatMemberIsRegular(chatMember: ChatMember) {
   return chatMemberIs(chatMember, 'regular');
+}
+
+/**
+ * Determines whether the user is in the chat as a restricted member.
+ */
+export function chatMemberIsRestrictedIn(chatMember: ChatMember) {
+  return chatMemberIs(chatMember, 'restricted_in');
+}
+
+/**
+ * Determines whether the user is _not_ in the chat and has restrictions.
+ */
+export function chatMemberIsRestrictedOut(chatMember: ChatMember) {
+  return chatMemberIs(chatMember, 'restricted_out');
 }
 
 /**

@@ -2,11 +2,26 @@ import {
   Api,
   ChatMember,
   ChatMemberAdministrator,
+  type ChatMemberBanned,
+  type ChatMemberLeft,
+  type ChatMemberMember,
+  type ChatMemberOwner,
+  type ChatMemberRestricted,
   ChatMemberUpdated,
   Context,
   UserFromGetMe,
 } from './deps.deno.ts';
-import { chatMemberHasRights } from './mod.ts';
+import {
+  type ChatMemberAdmin,
+  type ChatMemberFree,
+  chatMemberHasRights,
+  type ChatMemberIn,
+  type ChatMemberOut,
+  type ChatMemberRegular,
+  type ChatMemberRestrictedIn,
+  type ChatMemberRestrictedOut,
+  FilteredChatMember,
+} from './mod.ts';
 import {
   chatMemberFilter,
   chatMemberIs,
@@ -16,10 +31,76 @@ import {
 } from './mod.ts';
 import { assertEquals } from 'jsr:@std/assert@1';
 
+type ChatMemberStatusBase =
+  | Exclude<ChatMember['status'], 'restricted'>
+  | 'restricted_in'
+  | 'restricted_out';
+
+Deno.test('filter queries should produce the correct type', () => {
+  type Expect<T extends true> = T;
+  type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <
+    T,
+  >() => T extends Y ? 1 : 2 ? true
+    : false;
+
+  type AdminTest = Expect<
+    Equal<FilteredChatMember<ChatMember, 'admin'>, ChatMemberAdmin>
+  >;
+  type AdministratorTest = Expect<
+    Equal<
+      FilteredChatMember<ChatMember, 'administrator'>,
+      ChatMemberAdministrator
+    >
+  >;
+  type CreatorTest = Expect<
+    Equal<FilteredChatMember<ChatMember, 'creator'>, ChatMemberOwner>
+  >;
+  type FreeTest = Expect<
+    Equal<FilteredChatMember<ChatMember, 'free'>, ChatMemberFree>
+  >;
+  type InTest = Expect<
+    Equal<FilteredChatMember<ChatMember, 'in'>, ChatMemberIn>
+  >;
+  type OutTest = Expect<
+    Equal<FilteredChatMember<ChatMember, 'out'>, ChatMemberOut>
+  >;
+  type Foo = FilteredChatMember<ChatMember, 'regular'>;
+  type RegularTest = Expect<
+    Equal<FilteredChatMember<ChatMember, 'regular'>, ChatMemberRegular>
+  >;
+  type KickedTest = Expect<
+    Equal<FilteredChatMember<ChatMember, 'kicked'>, ChatMemberBanned>
+  >;
+  type LeftTest = Expect<
+    Equal<FilteredChatMember<ChatMember, 'left'>, ChatMemberLeft>
+  >;
+  type MemberTest = Expect<
+    Equal<FilteredChatMember<ChatMember, 'member'>, ChatMemberMember>
+  >;
+  type RestrictedTest = Expect<
+    Equal<FilteredChatMember<ChatMember, 'restricted'>, ChatMemberRestricted>
+  >;
+  type RestrictedInTest = Expect<
+    Equal<
+      FilteredChatMember<ChatMember, 'restricted_in'>,
+      ChatMemberRestrictedIn
+    >
+  >;
+  type RestrictedOutTest = Expect<
+    Equal<
+      FilteredChatMember<ChatMember, 'restricted_out'>,
+      ChatMemberRestrictedOut
+    >
+  >;
+});
+
 Deno.test('should apply query to chat member', () => {
   const results: Record<
-    ChatMember['status'],
-    Record<Exclude<ChatMemberQuery, ChatMember['status']>, boolean>
+    ChatMemberStatusBase,
+    Record<
+      Exclude<ChatMemberQuery, ChatMember['status']>,
+      boolean
+    >
   > = {
     administrator: {
       in: true,
@@ -27,6 +108,8 @@ Deno.test('should apply query to chat member', () => {
       free: true,
       admin: true,
       regular: false,
+      restricted_in: false,
+      restricted_out: false,
     },
     creator: {
       in: true,
@@ -34,6 +117,8 @@ Deno.test('should apply query to chat member', () => {
       free: true,
       admin: true,
       regular: false,
+      restricted_in: false,
+      restricted_out: false,
     },
     member: {
       in: true,
@@ -41,13 +126,26 @@ Deno.test('should apply query to chat member', () => {
       free: true,
       admin: false,
       regular: true,
+      restricted_in: false,
+      restricted_out: false,
     },
-    restricted: {
+    restricted_in: {
       in: true,
       out: false,
       free: false,
       admin: false,
       regular: true,
+      restricted_in: true,
+      restricted_out: false,
+    },
+    restricted_out: {
+      in: false,
+      out: true,
+      free: false,
+      admin: false,
+      regular: false,
+      restricted_in: false,
+      restricted_out: true,
     },
     left: {
       in: false,
@@ -55,6 +153,8 @@ Deno.test('should apply query to chat member', () => {
       free: false,
       admin: false,
       regular: false,
+      restricted_in: false,
+      restricted_out: false,
     },
     kicked: {
       in: false,
@@ -62,12 +162,26 @@ Deno.test('should apply query to chat member', () => {
       free: false,
       admin: false,
       regular: false,
+      restricted_in: false,
+      restricted_out: false,
     },
   } as const;
 
-  const statuses = Object.keys(results) as (keyof typeof results)[];
-  statuses.forEach((status) => {
-    const chatMember = { status } as ChatMember;
+  const statuses: ChatMember['status'][] = [
+    'administrator',
+    'creator',
+    'kicked',
+    'left',
+    'member',
+    'restricted',
+  ];
+  const baseStatuses = Object.keys(results) as ChatMemberStatusBase[];
+  baseStatuses.forEach((status) => {
+    const chatMember = (status === 'restricted_in'
+      ? { status: 'restricted', is_member: true }
+      : status === 'restricted_out'
+      ? { status: 'restricted', is_member: false }
+      : { status }) as ChatMember;
     const statusResults = results[status];
 
     const queries = Object.keys(
@@ -78,37 +192,26 @@ Deno.test('should apply query to chat member', () => {
     });
 
     statuses.forEach((query) => {
-      assertEquals(chatMemberIs(chatMember, query), status === query);
+      assertEquals(
+        chatMemberIs(chatMember, query),
+        chatMember.status === query,
+      );
     });
   });
 });
 
-function makeChatMemberUpdated(
-  oldChatMemberStatus: ChatMember['status'],
-  newChatMemberStatus: ChatMember['status'],
-) {
-  return {
-    old_chat_member: { status: oldChatMemberStatus },
-    new_chat_member: { status: newChatMemberStatus },
-  } as ChatMemberUpdated;
-}
-
-function makeMyChatMemberCtx(
-  oldStatus: ChatMember['status'],
-  newStatus: ChatMember['status'],
-) {
-  return new Context(
+Deno.test('should filter myChatMember', () => {
+  const administratorKickedCtx = new Context(
     {
       update_id: 123,
-      my_chat_member: makeChatMemberUpdated(oldStatus, newStatus),
+      my_chat_member: {
+        old_chat_member: { status: 'administrator' },
+        new_chat_member: { status: 'kicked' },
+      } as ChatMemberUpdated,
     },
     new Api(''),
     {} as UserFromGetMe,
   );
-}
-
-Deno.test('should filter myChatMember', () => {
-  const administratorKickedCtx = makeMyChatMemberCtx('administrator', 'kicked');
   const administratorKickedFilters = [
     ['administrator', 'kicked', true],
     ['administrator', 'out', true],
@@ -128,22 +231,18 @@ Deno.test('should filter myChatMember', () => {
   });
 });
 
-function makeChatMemberCtx(
-  oldStatus: ChatMember['status'],
-  newStatus: ChatMember['status'],
-) {
-  return new Context(
+Deno.test('should filter chatMember', () => {
+  const leftRestrictedInCtx = new Context(
     {
       update_id: 123,
-      chat_member: makeChatMemberUpdated(oldStatus, newStatus),
+      chat_member: {
+        old_chat_member: { status: 'left' },
+        new_chat_member: { status: 'restricted', is_member: true },
+      } as ChatMemberUpdated,
     },
     new Api(''),
     {} as UserFromGetMe,
   );
-}
-
-Deno.test('should filter chatMember', () => {
-  const leftRestrictedCtx = makeChatMemberCtx('left', 'restricted');
   const administratorKickedFilters = [
     ['left', 'restricted', true],
     ['restricted', 'left', false],
@@ -158,14 +257,21 @@ Deno.test('should filter chatMember', () => {
 
   administratorKickedFilters.forEach(([oldStatus, newStatus, expected]) => {
     const filter = chatMemberFilter(oldStatus, newStatus);
-    assertEquals(filter(leftRestrictedCtx), expected);
+    assertEquals(filter(leftRestrictedInCtx), expected);
   });
 });
 
 Deno.test('should filter out other types of updates', () => {
-  const administratorAdministratorCtx = makeChatMemberCtx(
-    'administrator',
-    'administrator',
+  const administratorAdministratorCtx = new Context(
+    {
+      update_id: 123,
+      chat_member: {
+        old_chat_member: { status: 'administrator' },
+        new_chat_member: { status: 'administrator' },
+      } as ChatMemberUpdated,
+    },
+    new Api(''),
+    {} as UserFromGetMe,
   );
   assertEquals(
     myChatMemberFilter('admin', 'admin')(administratorAdministratorCtx),
@@ -176,7 +282,17 @@ Deno.test('should filter out other types of updates', () => {
     true,
   );
 
-  const memberRestrictedCtx = makeMyChatMemberCtx('member', 'restricted');
+  const memberRestrictedCtx = new Context(
+    {
+      update_id: 123,
+      my_chat_member: {
+        old_chat_member: { status: 'member' },
+        new_chat_member: { status: 'restricted', is_member: true },
+      } as ChatMemberUpdated,
+    },
+    new Api(''),
+    {} as UserFromGetMe,
+  );
   assertEquals(
     myChatMemberFilter('free', 'restricted')(memberRestrictedCtx),
     true,
