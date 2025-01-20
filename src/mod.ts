@@ -17,10 +17,6 @@ import {
  * To avoid ambiguity we split the restricted role into "restricted_in" and
  * "restricted_out".
  */
-type ChatMemberStatusBase =
-  | Exclude<ChatMember['status'], 'restricted'>
-  | 'restricted_in'
-  | 'restricted_out';
 
 /**
  * A member of the chat, with restrictions applied.
