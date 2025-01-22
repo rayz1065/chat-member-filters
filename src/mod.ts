@@ -117,21 +117,14 @@ type NormalizeChatMemberQueryCore<Q extends ChatMemberQuery> =
 
 type MaybeArray<T> = T | T[];
 type NormalizeChatMemberQuery<
-  Q extends MaybeArray<ChatMemberQuery>,
+  Q extends ChatMemberQuery,
 > = Q extends ChatMemberQuery ? NormalizeChatMemberQueryCore<Q>
   : (Q extends ChatMemberQuery[] ? NormalizeChatMemberQuery<Q[number]>
     : never);
-type FilteredChatMemberCore<
-  C extends ChatMember,
-  Q extends ChatMember['status'] | 'restricted_in' | 'restricted_out',
-> = C & ChatMemberQueriesMap[Q];
 export type FilteredChatMember<
   C extends ChatMember,
-  Q extends MaybeArray<ChatMemberQuery>,
-> = FilteredChatMemberCore<
-  C,
-  NormalizeChatMemberQuery<Q extends string ? Q : Q[number]>
->;
+  Q extends ChatMemberQuery,
+> = C & ChatMemberQueriesMap[NormalizeChatMemberQuery<Q>];
 
 /**
  * Normalizes the query, returning the corresponding list of chat member
@@ -174,58 +167,7 @@ export function chatMemberIs<
   return roles.includes(chatMember.status as (typeof roles)[number]);
 }
 
-/**
- * Determines whether the user is a member a member of the chat, with any role,
- * possibly restricted.
- */
-export function chatMemberIsIn(chatMember: ChatMember) {
-  return chatMemberIs(chatMember, 'in');
-}
-
-/**
- * Determines whether the user is _not_ a member of the chat.
- */
-export function chatMemberIsOut(chatMember: ChatMember) {
-  return chatMemberIs(chatMember, 'out');
-}
-
-/**
- * Determines whether the user is a member of the chat, with any role, not
- * restricted.
- */
-export function chatMemberIsFree(chatMember: ChatMember) {
-  return chatMemberIs(chatMember, 'free');
-}
-
-/**
- * Determines whether the user is an admin of the chat, either administrator or
- * owner.
- */
-export function chatMemberIsAdmin(chatMember: ChatMember) {
-  return chatMemberIs(chatMember, 'admin');
-}
-
-/**
- * Determines whether the user is a regular (non-admin) user of the chat,
- * possibly restricted.
- */
-export function chatMemberIsRegular(chatMember: ChatMember) {
-  return chatMemberIs(chatMember, 'regular');
-}
-
-/**
- * Determines whether the user is in the chat as a restricted member.
- */
-export function chatMemberIsRestrictedIn(chatMember: ChatMember) {
-  return chatMemberIs(chatMember, 'restricted_in');
-}
-
-/**
- * Determines whether the user is _not_ in the chat and has restrictions.
- */
-export function chatMemberIsRestrictedOut(chatMember: ChatMember) {
-  return chatMemberIs(chatMember, 'restricted_out');
-}
+type AdministratorRight = keyof ChatAdministratorRights;
 
 /**
  * A list of rights that admins can have.
@@ -246,13 +188,11 @@ const chatMemberRights = [
   'can_edit_messages',
   'can_pin_messages',
   'can_manage_topics',
-] as const satisfies (keyof ChatAdministratorRights)[];
-
-type AdministratorRight = typeof chatMemberRights[number];
+] as const satisfies AdministratorRight[];
 
 function getChatMemberRights(
   chatMember: ChatMember,
-): Record<AdministratorRight, boolean> {
+): ChatAdministratorRights {
   const defaultRight = chatMember.status === 'creator';
 
   const defaults = Object.fromEntries(
@@ -298,6 +238,22 @@ export function chatMemberHasRights(
   return missing.length === 0;
 }
 
+/**
+ * Filter context to only find updates of type 'my_chat_member' where the status
+ * transitions from oldStatus to newStatus.
+ *
+ * Example:
+ * ```typescript
+ * // listen for updates where the bot enters a group/supergroup
+ * bot.chatType(['group', 'supergroup']).filter(
+ *  myChatMemberFilter('out', 'in'),
+ *  (ctx) => {
+ *    const { old_chat_member: oldChatMember, new_chat_member: newChatMember } =
+ *      ctx.myChatMember;
+ *    // ...
+ *  },
+ * );
+ */
 export function myChatMemberFilter<
   C extends Context,
   Q1 extends ChatMemberQuery,
@@ -319,6 +275,26 @@ export function myChatMemberFilter<
   };
 }
 
+/**
+ * Filter context to only find updates of type 'chat_member' where the status
+ * transitions from oldStatus to newStatus.
+ *
+ * Example:
+ * ```typescript
+ * // listen for updates where a user leaves a channel
+ * bot.chatType('channel').filter(
+ *  chatMemberFilter('in', 'out'),
+ *  (ctx) => {
+ *    const { old_chat_member: oldChatMember, new_chat_member: newChatMember } =
+ *      ctx.chatMember;
+ *    // ...
+ *  },
+ * );
+ * ```
+ *
+ * **Note**: To receive these updates the bot must be admin in the chat **and**
+ * you must add 'chat_member' to the list of allowed updates.
+ */
 export function chatMemberFilter<
   C extends Context,
   Q1 extends ChatMemberQuery,
